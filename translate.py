@@ -72,13 +72,18 @@ def read_info(text, language):
     print(locale_dict[text])
     read_text(locale_dict[text], language, False)
     
-def test_vocabulary(word_list, trans_list, start_i, end_i, language, target_lang):
+def test_vocabulary(word_list, trans_list, start_i, end_i, language, target_lang, interactive):
     for i in range(start_i, end_i):
         if (len(word_list[i]) > 2):
             print(f"Say the traduction for '{trans_list[i]}' in {language}:")
             read_info("Find the translation for: ", target_lang)
             read_text(trans_list[i], target_lang, False)
-            compare_transcription(word_list[i], language, target_lang, 2)
+            if interactive:
+                compare_transcription(word_list[i], language, target_lang, 2)
+            else:
+                read_info("The word was: ", target_lang)
+                read_text(word_list[i], language, False)
+                
             
 def compare_transcription(original_word, source_language, target_lang, max_attempts):
 
@@ -155,7 +160,7 @@ def read_text(text, language, do_slow):
         audio = AudioSegment.from_mp3("temp.mp3")
         play(audio)
 
-def translate_to_french(source_file, dest_file, decompose, read, source_lang, source_lang_full, target_lang, repeat_count):
+def translate_to_french(source_file, dest_file, decompose, read, source_lang, source_lang_full, target_lang, repeat_count, interactive):
     translator = Translator()
     nltk.download('punkt')  # Download the punkt tokenizer data if not already downloaded
 
@@ -257,9 +262,9 @@ def translate_to_french(source_file, dest_file, decompose, read, source_lang, so
                     read_text(processed_sentences[i], source_lang, True)
                     read_text(translated_sentences[i], target_lang, False)    
 
-            test_vocabulary(processed_words, translated_words, 0, len(processed_words) - 1, source_lang, target_lang)
+            test_vocabulary(processed_words, translated_words, 0, len(processed_words) - 1, source_lang, target_lang, interactive)
             
-            play(audio_end)
+            #play(audio_end)
             
             # Calculate completion percentage and print the status
             completion_percentage = (i + 1) / total_sentences * 100
@@ -294,10 +299,11 @@ if __name__ == "__main__":
     source_lang_full = sys.argv[4]
     target_lang = sys.argv[5]
     repeat_count = int(sys.argv[6])
+    interactive = False
     
     #compare_transcription("się", source_lang, target_lang, 2)
     
-    translate_to_french(source_file, dest_file, True, True, source_lang, source_lang_full, target_lang, repeat_count)
+    translate_to_french(source_file, dest_file, True, True, source_lang, source_lang_full, target_lang, repeat_count, interactive)
     
     
     
