@@ -4,7 +4,11 @@ import sys
 import signal
 import re
 import json
+import keyboard
+import queue
+import threading
 
+from pynput.mouse import Listener
 from pydub import AudioSegment
 from pydub.playback import play
 from gtts import gTTS
@@ -15,8 +19,18 @@ import numpy as np
 import vosk
 
 
+# Create a queue for communication between threads
+event_queue = queue.Queue()
+
 # global variable for locales
 locale_dict = {}
+
+#global variable for last word:
+global current_word
+#global variable for source language
+global global_source_language
+#global variable for target language
+global global_target_language
 
 #vosk_model = vosk.Model("C:\\Users\\ickylevel\\work\\dualtranslate\\model")
 
@@ -56,6 +70,7 @@ beep_sound2 = AudioSegment(
     channels=1,
 )
 
+# temp files must be placed in a folder named temp in script directory
 audio_fail = AudioSegment.from_mp3("1.mp3")
 audio_success = AudioSegment.from_mp3("2.mp3")
 audio_end = AudioSegment.from_mp3("3.mp3")
@@ -152,15 +167,53 @@ def play_recorded_audio(recorded):
     audio = AudioSegment.from_wav(temp_audio_file)
     play(audio)
 
-def read_text(text, language, do_slow):
+def check_set_current_word(text, language, do_slow):
+    global global_source_language
+    global current_word
+    if (global_source_language == language and text.find(' ') == -1):
+        current_word = text
+
+def read_text_sub(text, language, do_slow):
     if (text != ""):
         tts = gTTS(text, lang=language, slow=do_slow)  
         print(f"Reading ({language}): {text}")
         tts.save("temp.mp3")
         audio = AudioSegment.from_mp3("temp.mp3")
         play(audio)
+        check_set_current_word(text, language, do_slow)
+
+def read_text(text, language, do_slow):
+    check_interruption()
+    read_text_sub(text, language, do_slow)
+
+def spell_current_word():
+    global global_source_language
+    global current_word
+    text = ' , '.join(current_word)
+    
+    read_text_sub(text, global_target_language, True)
+    read_text_sub(text, global_source_language, True)
+    read_text_sub(current_word, global_source_language, True)
+
+def on_key_event(e):
+    if e.event_type == keyboard.KEY_DOWN:
+        if e.name == 'space':
+            event_queue.put(spell_current_word)
+
+def check_interruption():
+    # check for functions to execute
+    try:
+        event = event_queue.get_nowait()
+        if (not (event is None)):
+            event()
+    except queue.Empty:
+        pass
 
 def translate_to_french(source_file, dest_file, decompose, read, source_lang, source_lang_full, target_lang, repeat_count, interactive):
+    global global_source_language
+    global global_target_language
+    global_source_language = source_lang
+    global_target_language = target_lang
     translator = Translator()
     nltk.download('punkt')  # Download the punkt tokenizer data if not already downloaded
 
@@ -186,13 +239,15 @@ def translate_to_french(source_file, dest_file, decompose, read, source_lang, so
 
     signal.signal(signal.SIGINT, handle_interrupt)
 
+    # Register the key event handler
+    keyboard.hook(on_key_event)
+
     try:
         for i, sentence in enumerate(sentences):
             if interrupted:
                 break
 
             iter = len(translated_sentences)
-            
             
             translated_words = []
             processed_words = []
@@ -211,11 +266,11 @@ def translate_to_french(source_file, dest_file, decompose, read, source_lang, so
                             read_text(sentence, source_lang, True)
                             if interrupted:
                                break
-                            read_text(translation.text, target_lang, False)
+                            read_text(translation.text, target_lang, True)
                             if interrupted:
                                break
                     except:
-                        translated_sentences.append("[Translation failed]")
+                        print("[Translation failed]")
                 
                 for j, sub_sentence in enumerate(sub_sentences):
                     try:
@@ -226,11 +281,11 @@ def translate_to_french(source_file, dest_file, decompose, read, source_lang, so
                             read_text(sub_sentence, source_lang, True)
                             if interrupted:
                                break
-                            read_text(translation.text, target_lang, False)
+                            read_text(translation.text, target_lang, True)
                             if interrupted:
                                break
                     except:
-                        translated_sentences.append("[Translation failed]")
+                        print("[Translation failed]")
                     
                     # add a per word translation:
                     if decompose:
@@ -284,6 +339,8 @@ def translate_to_french(source_file, dest_file, decompose, read, source_lang, so
             file.write('\n')
 
     print("Translated content saved to", dest_file)
+
+    keyboard.unhook_all()
 
 if __name__ == "__main__":
 
